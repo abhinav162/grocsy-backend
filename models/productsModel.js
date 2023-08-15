@@ -9,6 +9,14 @@ const productSchema = new Schema({
         type: Number,
         required: true,
     },
+    quantity: {
+        type: Number,
+        required: true,
+    },
+    unit: {
+        type: String,
+        default: 'g',
+    },
     description: {
         type: String,
     },
@@ -18,6 +26,11 @@ const productSchema = new Schema({
     imageUrl: {
         type: String
     }, // Image URL for the product
+    category : {
+        type : String,
+        required : true,
+        default : "general"
+    }
 }, { timestamps: true });
 
 const Product = model('Product', productSchema);
