@@ -23,8 +23,12 @@ const productSchema = new Schema({
     sellerID: {
         type: Schema.Types.ObjectId,
     },
+    imagePublicId: {
+        type: String,
+    }, // Image Public ID for the product
     imageUrl: {
-        type: String
+        type: String,
+        required: false,
     }, // Image URL for the product
     category : {
         type : String,

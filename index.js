@@ -9,31 +9,45 @@ import Product from "./models/productsModel.js";
 import multer from "multer";
 import uuidv4 from 'uuid';
 import fs from 'fs';
+import { v2 as cloudinary } from 'cloudinary';
 
-const DIR = './uploads/';
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, DIR);
-    },
-    filename: (req, file, cb) => {
-        const fileName = file.originalname.toLowerCase().split(' ').join('-');
-        cb(null, uuidv4() + '-' + fileName)
-    }
-});
 
-var upload = multer({
-    storage: storage,
-    fileFilter: (req, file, cb) => {
-        if (file.mimetype == "image/png" || file.mimetype == "image/jpg" || file.mimetype == "image/jpeg") {
-            cb(null, true);
-        } else {
-            cb(null, false);
-            return cb(new Error('Only .png, .jpg and .jpeg format allowed!'));
-        }
-    }
-});
+//// multer config for image upload
+// const DIR = './uploads/';
+// const storage = multer.diskStorage({
+//     destination: (req, file, cb) => {
+//         cb(null, DIR);
+//     },
+//     filename: (req, file, cb) => {
+//         const fileName = file.originalname.toLowerCase().split(' ').join('-');
+//         cb(null, uuidv4() + '-' + fileName)
+//     }
+// });
+
+// var upload = multer({
+//     storage: storage,
+//     fileFilter: (req, file, cb) => {
+//         if (file.mimetype == "image/png" || file.mimetype == "image/jpg" || file.mimetype == "image/jpeg") {
+//             cb(null, true);
+//         } else {
+//             cb(null, false);
+//             return cb(new Error('Only .png, .jpg and .jpeg format allowed!'));
+//         }
+//     }
+// });
+
+
+//// new multer config for image upload
+const storage = multer.diskStorage({});
+const upload = multer({ storage: storage });
 
 dotenv.config();
+
+cloudinary.config({
+    cloud_name: process.env.cloud_name,
+    api_key: process.env.cloudinary_api_key,
+    api_secret: process.env.api_secret,
+});
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -237,7 +251,7 @@ app.get("/all-products/:sellerId", async (req, res) => {
 //// get product by id
 
 //// add product
-app.post("/add-product", checkToken, upload.single('imageUrl'), (req, res) => {
+app.post("/add-product", upload.single('') ,checkToken, async (req, res) => {
     const category = req.body.category;
     const name = req.body.name;
     const price = req.body.price;
@@ -245,11 +259,13 @@ app.post("/add-product", checkToken, upload.single('imageUrl'), (req, res) => {
     const unit = req.body.unit;
     const description = req.body.description;
     const sellerID = req.user_id;
+    const imagePublicId = req.body.publicId;
+    const imageUrl = req.body.imageUrl;
 
     try {
-        const url = req.protocol + '://' + req.get('host')
-        const imageUrl = url + '/uploads/' + req.file.filename
-        
+        // const url = req.protocol + '://' + req.get('host')
+        // const imageUrl = url + '/uploads/' + req.file.filename
+
         Product.create({
             category,
             name,
@@ -258,12 +274,13 @@ app.post("/add-product", checkToken, upload.single('imageUrl'), (req, res) => {
             unit,
             description,
             sellerID,
+            imagePublicId,
             imageUrl,
         });
 
         res.status(201).json({ message: 'Product added successfully' });
     }
-    catch(err){
+    catch (err) {
         console.error(err);
         res.status(500).json({ error: 'An error occurred. Please try again.' });
     }
@@ -271,7 +288,7 @@ app.post("/add-product", checkToken, upload.single('imageUrl'), (req, res) => {
 
 //// update product
 app.patch('/update-product/:productId', checkToken, async (req, res) => {
-    const {category, name, price, description, quantity, unit } = req.body;
+    const { category, name, price, description, quantity, unit } = req.body;
     const seller = req.user_id;
     const productId = req.params.productId;
 
@@ -324,17 +341,18 @@ app.delete('/delete-product/:productId', checkToken, async (req, res) => {
         if (!product.sellerID.equals(sellerID)) {
             return res.status(404).json({ error: 'Product not found or does not belong to the seller.' });
         }
-        else {  
-            // delete image
-            const path = product.imageUrl;
-            const filename = path.split('/uploads/')[1];
-            //// delete image from uploads folder
-            fs.unlink(`./uploads/${filename}`, (err) => {
+        else {
+            // delete image from cloudinary
+            const public_id = product.imagePublicId;
+            cloudinary.uploader.destroy(public_id, (err, result) => {
                 if (err) {
-                    console.error(err);
-                    return;
+                    console.log(err);
+                }
+                else {
+                    console.log(result);
                 }
             });
+
             // delete product
             product.deleteOne();
             res.status(200).json({ message: 'Product deleted successfully', product });
