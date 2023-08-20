@@ -8,60 +8,48 @@ import User from "./models/userModel.js";
 import Product from "./models/productsModel.js";
 import multer from "multer";
 import uuidv4 from 'uuid';
-import fs from 'fs';
+import bodyParser from "body-parser";
 import { v2 as cloudinary } from 'cloudinary';
-
-
-//// multer config for image upload
-// const DIR = './uploads/';
-// const storage = multer.diskStorage({
-//     destination: (req, file, cb) => {
-//         cb(null, DIR);
-//     },
-//     filename: (req, file, cb) => {
-//         const fileName = file.originalname.toLowerCase().split(' ').join('-');
-//         cb(null, uuidv4() + '-' + fileName)
-//     }
-// });
-
-// var upload = multer({
-//     storage: storage,
-//     fileFilter: (req, file, cb) => {
-//         if (file.mimetype == "image/png" || file.mimetype == "image/jpg" || file.mimetype == "image/jpeg") {
-//             cb(null, true);
-//         } else {
-//             cb(null, false);
-//             return cb(new Error('Only .png, .jpg and .jpeg format allowed!'));
-//         }
-//     }
-// });
-
-
-//// new multer config for image upload
-const storage = multer.diskStorage({});
-const upload = multer({ storage: storage });
+import { CloudinaryStorage } from "multer-storage-cloudinary";
 
 dotenv.config();
 
+// Set up cloudinary config
 cloudinary.config({
     cloud_name: process.env.cloud_name,
     api_key: process.env.cloudinary_api_key,
     api_secret: process.env.api_secret,
 });
 
+// Set up multer-storage-cloudinary
+const storage = new CloudinaryStorage({
+    cloudinary,
+    params: {
+        folder: "grocsy-products",
+    },
+    allowedFormats: ["jpg", "png"],
+    public_id: (req, file) => file.filename
+}) // this is storage for uploading image to cloudinary, it will upload image to cloudinary when we call parser function
+
+// image upload parser
+const upload = multer({ storage: storage }); // this is parser for uploading image to cloudinary
+
 const app = express();
 const port = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
-app.use('/uploads', express.static('uploads'))
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
+// connect to mongoDB
 mongoose.connect(process.env.MONGO_URI, {
     useNewUrlParser: true,
 }).then(() => {
     console.log("Connected to Database");
 })
 
+// generate token for user
 const generateToken = (user_id) => {
     const token = jwt.sign(
         {
@@ -74,13 +62,14 @@ const generateToken = (user_id) => {
     return token;
 };
 
+// check token middleware
 const checkToken = (req, res, next) => {
     let token = req.headers.authorization;
 
     // token present or not
     if (!token) {
         return res.status(401).json({
-            message: "Unauthorized!",
+            message: "Unauthorized! fuck",
         });
     }
 
@@ -95,7 +84,7 @@ const checkToken = (req, res, next) => {
         next();
     } catch {
         return res.status(401).json({
-            message: "Unauthorized!",
+            message: "Unauthorized! fuvk2",
         });
     }
 };
@@ -251,7 +240,7 @@ app.get("/all-products/:sellerId", async (req, res) => {
 //// get product by id
 
 //// add product
-app.post("/add-product", upload.single('') ,checkToken, async (req, res) => {
+app.post("/add-product", upload.single('file') ,checkToken, async (req, res) => {
     const category = req.body.category;
     const name = req.body.name;
     const price = req.body.price;
@@ -259,12 +248,11 @@ app.post("/add-product", upload.single('') ,checkToken, async (req, res) => {
     const unit = req.body.unit;
     const description = req.body.description;
     const sellerID = req.user_id;
-    const imagePublicId = req.body.publicId;
-    const imageUrl = req.body.imageUrl;
+    const imagePublicId = req.file.filename;
+    const imageUrl = req.file.path;
+
 
     try {
-        // const url = req.protocol + '://' + req.get('host')
-        // const imageUrl = url + '/uploads/' + req.file.filename
 
         Product.create({
             category,
@@ -278,7 +266,12 @@ app.post("/add-product", upload.single('') ,checkToken, async (req, res) => {
             imageUrl,
         });
 
-        res.status(201).json({ message: 'Product added successfully' });
+        res.status(201).json({ 
+            message: 'Product added successfully',
+            url: imageUrl,
+            publicId: imagePublicId
+        });
+        console.log(req.file);
     }
     catch (err) {
         console.error(err);
@@ -287,10 +280,12 @@ app.post("/add-product", upload.single('') ,checkToken, async (req, res) => {
 })
 
 //// update product
-app.patch('/update-product/:productId', checkToken, async (req, res) => {
+app.patch('/update-product/:productId',checkToken, async (req, res) => {
     const { category, name, price, description, quantity, unit } = req.body;
     const seller = req.user_id;
     const productId = req.params.productId;
+    // const imageUrl = req.file.path;
+    // console.log(req.file.path);
 
     try {
         // Find the product by ID and ensure it belongs to the seller
@@ -311,11 +306,6 @@ app.patch('/update-product/:productId', checkToken, async (req, res) => {
         }
         if (description) {
             product.description = description;
-        }
-        if (req.file) {
-            const url = req.protocol + '://' + req.get('host')
-            const imageUrl = url + '/uploads/' + req.file.filename
-            product.imageUrl = imageUrl;
         }
         if (quantity) {
             product.quantity = quantity;
