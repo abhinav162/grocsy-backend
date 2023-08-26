@@ -12,6 +12,7 @@ import bodyParser from "body-parser";
 import { v2 as cloudinary } from 'cloudinary';
 import { CloudinaryStorage } from "multer-storage-cloudinary";
 
+// Set up dotenv config
 dotenv.config();
 
 // Set up cloudinary config
@@ -240,7 +241,7 @@ app.get("/all-products/:sellerId", async (req, res) => {
 //// get product by id
 
 //// add product
-app.post("/add-product", upload.single('file') ,checkToken, async (req, res) => {
+app.post("/add-product", upload.single('file'), checkToken, async (req, res) => {
     const category = req.body.category;
     const name = req.body.name;
     const price = req.body.price;
@@ -266,7 +267,7 @@ app.post("/add-product", upload.single('file') ,checkToken, async (req, res) => 
             imageUrl,
         });
 
-        res.status(201).json({ 
+        res.status(201).json({
             message: 'Product added successfully',
             url: imageUrl,
             publicId: imagePublicId
@@ -280,7 +281,7 @@ app.post("/add-product", upload.single('file') ,checkToken, async (req, res) => 
 })
 
 //// update product
-app.patch('/update-product/:productId',checkToken, async (req, res) => {
+app.patch('/update-product/:productId', checkToken, async (req, res) => {
     const { category, name, price, description, quantity, unit } = req.body;
     const seller = req.user_id;
     const productId = req.params.productId;
@@ -354,11 +355,107 @@ app.delete('/delete-product/:productId', checkToken, async (req, res) => {
     }
 })
 
-// CART API
+// CARD API
 
 //// add to cart
+app.patch('/add-to-cart', checkToken, async (req, res) => {
+    const user_id = req.user_id;
+    // var pid = new ObjectId(req.body.product_id);
+    const product_id = req.body.product_id;
+    const quantity = req.body.quantity;
+
+    try {
+        const user = await User.findOne({ _id: user_id });
+
+        if (!user) {
+            return res.status(404).json({ error: 'User not found.' });
+        }
+
+        const existingCartItem = user.cart.find(
+            item => item.product_id.toString() === product_id
+        );
+
+        if (existingCartItem) {
+            const q = Number(existingCartItem.quantity)
+            existingCartItem.quantity = q + Number(quantity);
+        } else {
+            user.cart.push({ product_id, quantity });
+        }
+
+        await user.save();
+
+        res.status(200).json({ message: 'Product added to cart successfully', user });
+    }
+    catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'An error occurred while adding to cart. Please try again.' });
+    }
+})
+
+// add to cart 2
+app.post('/add-to-cart2/', checkToken, async (req, res) => {
+    try {
+        const userId = req.user_id;
+        const { product_id, quantity } = req.body;
+
+        // if (!mongoose.Types.ObjectId.isValid(userId)) {
+        //     return res.status(400).json({ message: 'Invalid user ID' });
+        // }
+
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        const existingCartItem = user.cart.find(
+            item => item.product_id.toString() === product_id
+        );
+
+        if (existingCartItem) {
+            existingCartItem.quantity += quantity;
+        } else {
+            user.cart.push({ product_id, quantity });
+        }
+
+        await user.save();
+
+        return res.status(200).json({ message: 'Product added to cart successfully' });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'An error occurred' });
+    }
+});
 
 //// get cart
+app.get('/get-cart', checkToken, async (req, res) => {
+    try {
+        const userId = req.user_id;
+
+        if (!mongoose.Types.ObjectId.isValid(userId)) {
+            return res.status(400).json({ message: 'Invalid user ID' });
+        }
+
+        const user = await User.findById(userId).populate('cart.product_id');
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        const cartItems = user.cart.map(item => ({
+            product_id: item.product_id._id,
+            name: item.product_id.name, // Assuming you have a 'name' field in your Product model
+            quantity: item.quantity,
+            price: item.product_id.price,
+            unit: item.product_id.unit,
+            imageUrl: item.product_id.imageUrl,
+        }));
+
+        return res.status(200).json(cartItems);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'An error occurred' });
+    }
+})
 
 //// delete from cart
 
