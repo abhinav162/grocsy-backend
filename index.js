@@ -355,13 +355,14 @@ app.delete('/delete-product/:productId', checkToken, async (req, res) => {
     }
 })
 
-// CARD API
+// CART API
 
 //// add to cart
 app.patch('/add-to-cart', checkToken, async (req, res) => {
     const user_id = req.user_id;
     const product_id = req.body.product_id;
     const quantity = req.body.quantity;
+    const toDelete = req.body.toDelete;  // if true, delete the product from cart
 
     try {
         const user = await User.findOne({ _id: user_id });
@@ -373,6 +374,14 @@ app.patch('/add-to-cart', checkToken, async (req, res) => {
         const existingCartItem = user.cart.find(
             item => item.product_id.toString() === product_id
         );
+
+        if(existingCartItem && toDelete){
+            user.cart.pull({ _id: existingCartItem._id });
+
+            await user.save();
+
+            return res.status(200).json({ message: 'Product removed from cart successfully', user });
+        } // if toDelete is true, delete the product from cart
 
         if (existingCartItem) {
             const q = Number(existingCartItem.quantity)
@@ -387,9 +396,10 @@ app.patch('/add-to-cart', checkToken, async (req, res) => {
     }
     catch (err) {
         console.error(err);
-        res.status(500).json({ message: 'An error occurred while adding to cart. Please try again.' });
+        res.status(500).json({ message: err });
     }
 })
+
 
 //// get cart
 app.get('/get-cart', checkToken, async (req, res) => {
